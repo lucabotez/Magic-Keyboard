@@ -8,14 +8,14 @@ CFLAGS=-Wall -Wextra -Wshadow -Wpedantic -std=c99 -O0 -g
 TARGETS=mk
 
 #define object-files
-OBJ=mk.o
+OBJ=mk.o trie.o
 
 build: $(TARGETS)
 
-mk: mk.o
+mk: $(OBJ)
 	$(CC) $(CFLAGS) $^ -o $@
 
-%.o: %.c
+%.o: %.c %.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
