@@ -1,169 +1,10 @@
 // Copyright @lucabotez
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
+#include "mk.h"
+#include "trie.h"
 
-#define DIE(assertion, call_description)				\
-	do {								\
-		if (assertion) {					\
-			fprintf(stderr, "(%s, %d): ",			\
-					__FILE__, __LINE__);		\
-			perror(call_description);			\
-			exit(errno);					\
-		}							\
-	} while (0)
-
-#define WORD_SIZE 256
-
-// implementarea din laborator a structurii de date
-
-typedef struct trie_node_t trie_node_t;
-struct trie_node_t {
-	int end_of_word;
-
-	int frequency;
-
-	trie_node_t **children;
-	int n_children;
-};
-
-typedef struct trie_t trie_t;
-struct trie_t {
-	trie_node_t *root;
-
-	int size;
-
-	int data_size;
-
-	int alphabet_size;
-};
-
-trie_node_t *trie_create_node(trie_t *trie)
-{
-	trie_node_t *node = malloc(sizeof(trie_node_t));
-	DIE(!node, "node malloc");
-
-	node->end_of_word = 0;
-	node->frequency = 0;
-	node->n_children = 0;
-	node->children = calloc(trie->alphabet_size, sizeof(trie_node_t *));
-
-	return node;
-}
-
-trie_t *trie_create(int data_size, int alphabet_size)
-{
-	trie_t *trie = malloc(sizeof(trie_t));
-	DIE(!trie, "trie malloc");
-
-	trie->size = 0;
-	trie->data_size = data_size;
-	trie->alphabet_size = alphabet_size;
-
-	trie->root = trie_create_node(trie);
-	return trie;
-}
-
-void trie_insert(trie_t *trie, char *key)
-{
-	if (key[0] == '\0') {
-		trie->root->end_of_word = 1;
-		return;
-	}
-
-	trie_node_t *current = trie->root;
-	int i = 0;
-
-	while (key[i] != '\0') {
-		int letter = key[i] - 'a';
-
-		if (!current->children[letter]) {
-			current->children[letter] = trie_create_node(trie);
-			current->n_children++;
-		}
-
-		current = current->children[letter];
-		i++;
-	}
-
-	if (current->end_of_word) {
-		current->frequency++;
-	} else {
-		current->end_of_word = 1;
-		current->frequency = 1;
-	}
-
-	trie->size++;
-}
-
-void trie_free_subtrie(trie_t *trie, trie_node_t *node)
-{
-	if (!node)
-		return;
-
-	for (int i = 0; i < trie->alphabet_size && node->n_children; ++i) {
-		if (!node->children[i])
-			continue;
-
-		trie_free_subtrie(trie, node->children[i]);
-		node->n_children--;
-		node->children[i] = NULL;
-	}
-
-	free(node->children);
-	free(node);
-}
-
-void trie_free(trie_t **p_trie)
-{
-	trie_free_subtrie(*p_trie, (*p_trie)->root);
-	free(*p_trie);
-}
-
-void trie_remove(trie_t *trie, char *key)
-{
-	if (key[0] == '\0') {
-		trie->root->end_of_word = 0;
-		trie->size--;
-		return;
-	}
-
-	trie_node_t *current = trie->root;
-	trie_node_t *parent = trie->root;
-	int parent_letter = (key[0] - 'a');
-	int i = 0;
-
-	while (key[i] != '\0') {
-		int letter = key[i] - 'a';
-
-		if (!current->children[letter])
-			return;
-
-		if (current->n_children > 1 || current->end_of_word) {
-			parent = current;
-			parent_letter = letter;
-		}
-
-		current = current->children[letter];
-
-		i++;
-	}
-
-	current->end_of_word = 0;
-	current->frequency = 0;
-	if (!current->n_children) {
-		trie_free_subtrie(trie, parent->children[parent_letter]);
-		parent->children[parent_letter] = NULL;
-		parent->n_children--;
-	}
-
-	trie->size--;
-}
-
-// functia calculeaza si returneaza numarul de litere diferite dintre doua
-// cuvinte de acceasi dimensiune word1 si word2
+// function that computes and returns the number of different letters between
+// 2 words of the same length
 int difference(char *word1, char *word2)
 {
 	int num = 0;
@@ -174,48 +15,45 @@ int difference(char *word1, char *word2)
 	return num;
 }
 
-// functia parcurge intregul trie, verificand pentru fiecare cuvant daca difera
-// in cel mult num litere si este de aceeasi lungime cu word, afisandu-le pe
-// cele ce respecta conditiile in ordine lexicografica (acestea fiind retinute
-// in new)
-void autocorrect(trie_node_t *node, char *new, int length, char *word,
+// function that iterates through the trie, checking for each word if there are more
+// than num different letters and is the same length with a given word, printing them
+// in alphabetical order
+void autocorrect(trie_node_t *node, char *new_word, int length, char *word,
 				 int num, int *check)
 {
 	if (node->end_of_word) {
-		new[length] = '\0';
+		new_word[length] = '\0';
 
 		// verificam daca sunt respectate conditiile
-		if (length == strlen(word) && difference(word, new) <= num) {
-			printf("%s\n", new);
+		// checking if the conditions are respected
+		if (length == strlen(word) && difference(word, new_word) <= num) {
+			printf("%s\n", new_word);
 
-			// tinem minte daca am afisat macar un cuvant
+			// marking that at least one word was printed
 			*check = 1;
 		}
 	}
 
-	// parcurgere recursiva prin trie
+	// recursive trie iteration
 	for (int i = 0; i < 26; i++)
 		if (node->children[i]) {
-			new[length] = i + 'a';
+			new_word[length] = i + 'a';
 
-			autocorrect(node->children[i], new, length + 1,
+			autocorrect(node->children[i], new_word, length + 1,
 						word, num, check);
 		}
 }
 
-// functia gaseste si afiseaza primul cuvant ce are prefixul corespunzator
-// (cel mai mic lexicografic)
+// function that finds and prints the first word that matches the prefix
 void autocomplete_1(trie_node_t *node, char *word, int length)
 {
-	// formam cuvantul
+	// forming the word
 	while (node->end_of_word == 0)
 		for (int i = 0; i < 26; i++)
 			if (node->children[i]) {
 				word[length] = i + 'a';
 				length++;
 
-				// in momentul gasirii primei litere salvate ne mutam pe nodul
-				// corespunzator
 				node = node->children[i];
 				break;
 			}
@@ -224,14 +62,14 @@ void autocomplete_1(trie_node_t *node, char *word, int length)
 	printf("%s\n", word);
 }
 
-// functia gaseste cel mai scurt cuvant ce are prefixul corespunzator
+// function that finds the shortest word that matches the prefix
 void autocomplete_2(trie_node_t *node, char *prefix, char *shortest,
 					int length, int *first)
 {
 	if (node->end_of_word) {
 		prefix[length] = '\0';
 
-		// pt primul cuvant gasit nu mai verificam lungimea
+		// length is not checked for the first word
 		if (*first == 1) {
 			*first = 0;
 			strcpy(shortest, prefix);
@@ -240,7 +78,7 @@ void autocomplete_2(trie_node_t *node, char *prefix, char *shortest,
 		}
 	}
 
-	// parcurgere recursiva prin trie
+	// recursive trie iteration
 	for (int i = 0; i < 26; i++)
 		if (node->children[i]) {
 			prefix[length] = i + 'a';
@@ -249,23 +87,22 @@ void autocomplete_2(trie_node_t *node, char *prefix, char *shortest,
 		}
 }
 
-// functia gaseste cel mai frecvent folosit cuvant ce are prefixul
-// corespunzator
+// function that finds the most frequently used word that matches the prefix
 void autocomplete_3(trie_node_t *node, char *prefix, char *freq,
 					int *prev_freq, int length)
 {
 	if (node->end_of_word) {
 		prefix[length] = '\0';
 
-		// comparam frecventa cuvantului gasit cu cea mai buna frecventa
-		// intalnita pana atunci
+		// comparing the use frequency of the found word with the best found
+		// frequency
 		if ((*prev_freq) < node->frequency) {
 			strcpy(freq, prefix);
 			*prev_freq = node->frequency;
 		}
 	}
 
-	// parcurgere recursiva prin trie
+	// recursive trie iteration
 	for (int i = 0; i < 26; i++)
 		if (node->children[i]) {
 			prefix[length] = i + 'a';
@@ -274,19 +111,20 @@ void autocomplete_3(trie_node_t *node, char *prefix, char *freq,
 		}
 }
 
-// se apeleaza pt fiecare caz de autocomplete functia corespunzatoare
+// function that handles the autocomplete request, calling the proper helper
+// function (autocomplete1/2/3)
 void autocomplete_prep(trie_t *trie, char *prefix, int num)
 {
 	trie_node_t *node = trie->root;
 
-	// salvam ultimul nod ce formeaza prefixul dat, dandu-l ca radacina
-	// in functiile de autocomplete
+	// storing the last node that forms the prefix, using it as root in
+	// autocomplete
 	for (int i = 0; i < strlen(prefix); i++) {
-		// cazul in care prefixul nu este gasit in trie
+		// prefix not found case
 		if (!node->children[prefix[i] - 'a']) {
 			printf("No words found\n");
 
-			// daca avem autocomplete 0
+			// 0 autocomplete case
 			if (num == 0) {
 				printf("No words found\n");
 				printf("No words found\n");
@@ -297,8 +135,7 @@ void autocomplete_prep(trie_t *trie, char *prefix, int num)
 		node = node->children[prefix[i] - 'a'];
 	}
 
-	// copie a prefixului, pierzand prefixul original de la un caz de
-	// autocomplete la altul
+	// prefix copy, the original is lost after calling the helper functions
 	char prefix_copy[WORD_SIZE];
 	strcpy(prefix_copy, prefix);
 
@@ -306,22 +143,22 @@ void autocomplete_prep(trie_t *trie, char *prefix, int num)
 		autocomplete_1(node, prefix, strlen(prefix));
 
 	if (num == 2 || num == 0) {
-		// punem valoarea originala in prefix
+		// restoring the original value
 		strcpy(prefix, prefix_copy);
 
-		char shortest[WORD_SIZE]; // aici va fi salvat cuvantul potrivit
-		int first = 1;      // cuvantul este primul gasit
+		char shortest[WORD_SIZE]; // matched word
+		int first = 1;      // if the word is the first one found
 
 		autocomplete_2(node, prefix, shortest, strlen(prefix), &first);
 		printf("%s\n", shortest);
 	}
 
 	if (num == 3 || num == 0) {
-		// punem valoarea originala in prefix
+		// restoring the original value
 		strcpy(prefix, prefix_copy);
 
-		char freq[WORD_SIZE];    // aici va fi salvat cuvantul gasit
-		int prev_freq = 0; // frecventa cuvantului salvat
+		char freq[WORD_SIZE];    // matched word
+		int prev_freq = 0; // stored word frequency
 
 		autocomplete_3(node, prefix, freq, &prev_freq, strlen(prefix));
 		printf("%s\n", freq);
@@ -331,8 +168,8 @@ void autocomplete_prep(trie_t *trie, char *prefix, int num)
 int main(void)
 {
 	trie_t *trie = trie_create(sizeof(char), 26);
-	char command[WORD_SIZE]; // comanda citita
-	char word[WORD_SIZE];    // cuvantul ce urmeaza sa fie adaugat / autocorrect
+	char command[WORD_SIZE]; // received command
+	char word[WORD_SIZE];    // the word that is going to be added / autocorrected
 
 	while (1) {
 		fscanf(stdin, "%s", command);
@@ -347,28 +184,28 @@ int main(void)
 			FILE *in = fopen(filename, "rt");
 			DIE(!in, "failed to open file");
 
-			// citim toate cuvintele din fisier
+			// receiving the file database
 			do {
 				fscanf(in, "%s", word);
 				trie_insert(trie, word);
 			} while (feof(in) == 0);
 
-			trie_remove(trie, word); // ultimul cuvant va fi salvat de 2 ori
+			trie_remove(trie, word);
 
 			fclose(in);
 		} else if (strcmp(command, "AUTOCORRECT") == 0) {
 			int num, check = 0;
 			fscanf(stdin, "%s%d", word, &num);
 
-			char new[WORD_SIZE]; // rezultatul autocorrectului
+			char new[WORD_SIZE]; // autocorrect result
 			autocorrect(trie->root, new, 0, word, num, &check);
 
-			// verificam daca nu am gasit niciun cuvant
+			// no word found case
 			if (check == 0)
 				printf("No words found\n");
 		} else if (strcmp(command, "AUTOCOMPLETE") == 0) {
 			char prefix[WORD_SIZE];
-			int num; // numarul autocompleteului
+			int num; // number of used autocomplete
 
 			fscanf(stdin, "%s%d", prefix, &num);
 			autocomplete_prep(trie, prefix, num);
